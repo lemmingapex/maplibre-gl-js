@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Create a fill heatmap layer</title>
+    <meta property="og:description" content="Color the map by how many polygons overlap at each point." />
+    <meta property="og:category" content="Heatmaps & Clusters" />
+    <meta property="og:order" content="3" />
+    <meta property="og:created" content="2026-11-20" />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='../../dist/maplibre-gl.css' />
+
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+        #controls {
+            position: absolute; top: 10px; left: 10px; padding: 10px;
+            background: rgba(255, 255, 255, 0.9); border-radius: 4px; font: 12px sans-serif;
+        }
+        #controls label { display: block; margin-bottom: 6px; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="controls">
+    <label>Limit count <input id="limit" type="range" min="1" max="30" value="10"> <span id="limit-value">10</span></label>
+    <label>Opacity <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+</div>
+
+<script type="module">
+    import * as maplibregl from '../../dist/maplibre-gl-dev.mjs';
+
+    function circle(lng, lat, radius) {
+        const ring = [];
+        for (let i = 0; i <= 32; i++) {
+            const angle = (i / 32) * 2 * Math.PI;
+            ring.push([lng + radius * Math.cos(angle), lat + radius * Math.sin(angle)]);
+        }
+        return {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [ring]}};
+    }
+
+    // Overlapping circles scattered around a few hotspots.
+    const hotspots = [[-100, 40], [-80, 35], [-115, 35]];
+    const features = [];
+    for (let i = 0; i < 300; i++) {
+        const [lng, lat] = hotspots[i % hotspots.length];
+        features.push(circle(lng + (Math.random() - 0.5) * 20, lat + (Math.random() - 0.5) * 12, 1 + Math.random() * 3));
+    }
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://demotiles.maplibre.org/style.json',
+        center: [-98, 38],
+        zoom: 3
+    });
+
+    map.on('load', () => {
+        map.addSource('areas', {
+            'type': 'geojson',
+            'data': {type: 'FeatureCollection', features}
+        });
+
+        map.addLayer({
+            'id': 'areas-density',
+            'type': 'fill-heatmap',
+            'source': 'areas',
+            'paint': {
+                'fill-heatmap-limit-count': 10,
+                'fill-heatmap-opacity': 0.8
+            }
+        });
+    });
+
+    document.getElementById('limit').addEventListener('input', (e) => {
+        document.getElementById('limit-value').textContent = e.target.value;
+        map.setPaintProperty('areas-density', 'fill-heatmap-limit-count', Number(e.target.value));
+    });
+    document.getElementById('opacity').addEventListener('input', (e) => {
+        map.setPaintProperty('areas-density', 'fill-heatmap-opacity', Number(e.target.value));
+    });
+</script>
+</body>
+</html>
