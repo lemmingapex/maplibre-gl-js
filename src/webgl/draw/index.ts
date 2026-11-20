@@ -4,6 +4,7 @@ import {drawHeatmap} from './draw_heatmap.ts';
 import {drawLine} from './draw_line.ts';
 import {drawFill} from './draw_fill.ts';
 import {drawFillExtrusion} from './draw_fill_extrusion.ts';
+import {drawFillHeatmap} from './draw_fill_heatmap.ts';
 import {drawHillshade} from './draw_hillshade.ts';
 import {drawColorRelief} from './draw_color_relief.ts';
 import {drawRaster} from './draw_raster.ts';
@@ -25,6 +26,7 @@ export type DrawFunctions = {
     line: typeof drawLine;
     fill: typeof drawFill;
     fillExtrusion: typeof drawFillExtrusion;
+    fillHeatmap: typeof drawFillHeatmap;
     hillshade: typeof drawHillshade;
     colorRelief: typeof drawColorRelief;
     raster: typeof drawRaster;
@@ -44,6 +46,7 @@ export const webglDrawFunctions: DrawFunctions = {
     line: drawLine,
     fill: drawFill,
     fillExtrusion: drawFillExtrusion,
+    fillHeatmap: drawFillHeatmap,
     hillshade: drawHillshade,
     colorRelief: drawColorRelief,
     raster: drawRaster,

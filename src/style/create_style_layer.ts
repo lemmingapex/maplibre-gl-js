@@ -4,6 +4,7 @@ import {HillshadeStyleLayer} from './style_layer/hillshade_style_layer.ts';
 import {ColorReliefStyleLayer} from './style_layer/color_relief_style_layer.ts';
 import {FillStyleLayer} from './style_layer/fill_style_layer.ts';
 import {FillExtrusionStyleLayer} from './style_layer/fill_extrusion_style_layer.ts';
+import {FillHeatmapStyleLayer} from './style_layer/fill_heatmap_style_layer.ts';
 import {LineStyleLayer} from './style_layer/line_style_layer.ts';
 import {SymbolStyleLayer} from './style_layer/symbol_style_layer.ts';
 import {BackgroundStyleLayer} from './style_layer/background_style_layer.ts';
@@ -18,6 +19,7 @@ export type AnyStyleLayer =
     | HillshadeStyleLayer
     | ColorReliefStyleLayer
     | FillExtrusionStyleLayer
+    | FillHeatmapStyleLayer
     | FillStyleLayer
     | LineStyleLayer
     | SymbolStyleLayer
@@ -42,6 +44,8 @@ export function createStyleLayer(layer: LayerSpecification | CustomLayerInterfac
             return new FillExtrusionStyleLayer(layer, globalState);
         case 'heatmap':
             return new HeatmapStyleLayer(layer, globalState);
+        case 'fill-heatmap':
+            return new FillHeatmapStyleLayer(layer, globalState);
         case 'hillshade':
             return new HillshadeStyleLayer(layer, globalState);
         case 'line':

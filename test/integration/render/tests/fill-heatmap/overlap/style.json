@@ -1,0 +1,23 @@
+{
+  "version": 8,
+  "metadata": {"test": {"width": 256, "height": 256}},
+  "center": [0, 0],
+  "zoom": 3,
+  "sources": {
+    "polygons": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [[[-15, -15], [5, -15], [5, 5], [-15, 5], [-15, -15]]]}},
+          {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [[[-5, -5], [15, -5], [15, 15], [-5, 15], [-5, -5]]]}},
+          {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [[[-10, -2], [10, -2], [10, 2], [-10, 2], [-10, -2]]]}}
+        ]
+      }
+    }
+  },
+  "layers": [
+    {"id": "background", "type": "background", "paint": {"background-color": "white"}},
+    {"id": "density", "type": "fill-heatmap", "source": "polygons", "paint": {"fill-heatmap-limit-count": 3}}
+  ]
+}

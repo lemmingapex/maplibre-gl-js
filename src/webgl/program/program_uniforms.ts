@@ -3,6 +3,7 @@ import {fillPatternUniforms, fillOutlineUniforms, fillOutlinePatternUniforms, fi
 import {circleUniforms, type CircleUniformsType} from './circle_program.ts';
 import {debugUniforms, type DebugUniformsType} from './debug_program.ts';
 import {heatmapUniforms, heatmapTextureUniforms, type HeatmapUniformsType, type HeatmapTextureUniformsType} from './heatmap_program.ts';
+import {fillHeatmapUniforms, fillHeatmapTextureUniforms, type FillHeatmapUniformsType, type FillHeatmapTextureUniformsType} from './fill_heatmap_program.ts';
 import {hillshadeUniforms, hillshadePrepareUniforms, type HillshadeUniformsType, type HillshadePrepareUniformsType} from './hillshade_program.ts';
 import {colorReliefUniforms, type ColorReliefUniformsType} from './color_relief_program.ts';
 import {lineUniforms, lineGradientUniforms, linePatternUniforms, lineSDFUniforms, lineGradientSDFUniforms, type LineUniformsType, type LineGradientUniformsType, type LinePatternUniformsType, type LineSDFUniformsType, type LineGradientSDFUniformsType} from './line_program.ts';
@@ -36,6 +37,8 @@ export const programUniforms: {
     clippingMask: (context: Context, locations: UniformLocations) => EmptyUniforms;
     heatmap: (context: Context, locations: UniformLocations) => HeatmapUniformsType;
     heatmapTexture: (context: Context, locations: UniformLocations) => HeatmapTextureUniformsType;
+    fillHeatmap: (context: Context, locations: UniformLocations) => FillHeatmapUniformsType;
+    fillHeatmapTexture: (context: Context, locations: UniformLocations) => FillHeatmapTextureUniformsType;
     hillshade: (context: Context, locations: UniformLocations) => HillshadeUniformsType;
     hillshadePrepare: (context: Context, locations: UniformLocations) => HillshadePrepareUniformsType;
     colorRelief: (context: Context, locations: UniformLocations) => ColorReliefUniformsType;
@@ -71,6 +74,8 @@ export const programUniforms: {
     clippingMask: emptyUniforms,
     heatmap: heatmapUniforms,
     heatmapTexture: heatmapTextureUniforms,
+    fillHeatmap: fillHeatmapUniforms,
+    fillHeatmapTexture: fillHeatmapTextureUniforms,
     hillshade: hillshadeUniforms,
     hillshadePrepare: hillshadePrepareUniforms,
     colorRelief: colorReliefUniforms,
