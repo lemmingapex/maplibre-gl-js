@@ -1,0 +1,107 @@
+{
+  "version": 8,
+  "metadata": {
+    "test": {
+      "width": 256,
+      "height": 256
+    }
+  },
+  "center": [
+    0,
+    0
+  ],
+  "zoom": 3,
+  "sources": {
+    "geojson": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    -9,
+                    -9
+                  ],
+                  [
+                    3,
+                    -9
+                  ],
+                  [
+                    3,
+                    3
+                  ],
+                  [
+                    -9,
+                    3
+                  ],
+                  [
+                    -9,
+                    -9
+                  ]
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    -3,
+                    -3
+                  ],
+                  [
+                    9,
+                    -3
+                  ],
+                  [
+                    9,
+                    9
+                  ],
+                  [
+                    -3,
+                    9
+                  ],
+                  [
+                    -3,
+                    -3
+                  ]
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "white"
+      }
+    },
+    {
+      "id": "heatmap",
+      "type": "heatmap",
+      "source": "geojson",
+      "paint": {
+        "heatmap-radius": 1,
+        "heatmap-intensity": 0.5
+      },
+      "layout": {
+        "heatmap-geometry": "shapes"
+      }
+    }
+  ]
+}

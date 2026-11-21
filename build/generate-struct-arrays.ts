@@ -17,6 +17,7 @@ import rasterBoundsAttributes from '../src/data/raster_bounds_attributes.ts';
 import circleAttributes from '../src/data/bucket/circle_attributes.ts';
 import fillAttributes from '../src/data/bucket/fill_attributes.ts';
 import fillExtrusionAttributes from '../src/data/bucket/fill_extrusion_attributes.ts';
+import heatmapLineAttributes from '../src/data/bucket/heatmap_line_attributes.ts';
 import {lineLayoutAttributes} from '../src/data/bucket/line_attributes.ts';
 import {lineLayoutAttributesExt} from '../src/data/bucket/line_attributes_ext.ts';
 import {patternAttributes} from '../src/data/bucket/pattern_attributes.ts';
@@ -143,6 +144,7 @@ const layoutAttributes = {
     fill: fillAttributes,
     'fill-extrusion': fillExtrusionAttributes,
     heatmap: circleAttributes,
+    'heatmap-line': heatmapLineAttributes,
     line: lineLayoutAttributes,
     lineExt: lineLayoutAttributesExt,
     pattern: patternAttributes,

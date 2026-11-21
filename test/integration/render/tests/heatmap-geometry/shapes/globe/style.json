@@ -1,0 +1,99 @@
+{
+  "version": 8,
+  "metadata": {
+    "test": {
+      "width": 256,
+      "height": 256
+    }
+  },
+  "center": [
+    0,
+    0
+  ],
+  "zoom": 1,
+  "sources": {
+    "geojson": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    -60,
+                    -10
+                  ],
+                  [
+                    40,
+                    -10
+                  ],
+                  [
+                    40,
+                    50
+                  ],
+                  [
+                    -60,
+                    50
+                  ],
+                  [
+                    -60,
+                    -10
+                  ]
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -90,
+                  -40
+                ],
+                [
+                  90,
+                  40
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "white"
+      }
+    },
+    {
+      "id": "heatmap",
+      "type": "heatmap",
+      "source": "geojson",
+      "paint": {
+        "heatmap-radius": 15,
+        "heatmap-intensity": 0.5
+      },
+      "layout": {
+        "heatmap-geometry": "shapes"
+      }
+    }
+  ],
+  "projection": {
+    "type": "globe"
+  },
+  "sky": {
+    "atmosphere-blend": 0.0
+  }
+}

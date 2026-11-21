@@ -8,6 +8,17 @@ import type {EvaluationParameters} from '../evaluation_parameters.ts';
 import type {LayerSpecification} from '@maplibre/maplibre-gl-style-spec';
 import type {VectorTileFeatureLike} from '@maplibre/vt-pbf';
 
+function createShapesHeatmapLayer(): HeatmapStyleLayer {
+    const layer = new HeatmapStyleLayer({
+        id: 'heatmap',
+        type: 'heatmap',
+        layout: {'heatmap-geometry': 'shapes'},
+        paint: {'heatmap-radius': 10}
+    } as LayerSpecification, {});
+    layer.recalculate({} as EvaluationParameters, []);
+    return layer;
+}
+
 describe('HeatmapStyleLayer.queryIntersectsFeature', () => {
     const feature = {} as VectorTileFeatureLike;
     const featureState = {};
@@ -37,6 +48,28 @@ describe('HeatmapStyleLayer.queryIntersectsFeature', () => {
         heatmapLayer.recalculate({} as EvaluationParameters, []);
         return heatmapLayer;
     }
+
+    test('returns `true` anywhere inside a polygon with heatmap-geometry: shapes', () => {
+        const {projectedCamera} = createTestCamera({width: 400, height: 300});
+        expect(createShapesHeatmapLayer().queryIntersectsFeature({
+            ...params,
+            feature: {type: 3} as VectorTileFeatureLike,
+            geometry: [[new Point(0, 0), new Point(1000, 0), new Point(1000, 1000), new Point(0, 1000), new Point(0, 0)]],
+            queryGeometry: [new Point(500, 500)],
+            projectedCamera
+        } as any)).toBe(true);
+    });
+
+    test('returns `true` within the radius of a line with heatmap-geometry: shapes', () => {
+        const {projectedCamera} = createTestCamera({width: 400, height: 300});
+        expect(createShapesHeatmapLayer().queryIntersectsFeature({
+            ...params,
+            feature: {type: 2} as VectorTileFeatureLike,
+            geometry: [[new Point(0, 500), new Point(1000, 500)]],
+            queryGeometry: [new Point(500, 550)],
+            projectedCamera
+        } as any)).toBe(true);
+    });
 
     describe('Mercator projection', () => {
         const {projectedCamera} = createTestCamera({minZoom: 0, maxZoom: 22, minPitch: 0, maxPitch: 85, renderWorldCopies: true, width: 400, height: 300});

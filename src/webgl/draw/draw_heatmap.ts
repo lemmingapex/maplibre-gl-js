@@ -1,15 +1,21 @@
 import {Texture} from '../texture.ts';
-import {Color} from '@maplibre/maplibre-gl-style-spec';
+import {Color, latest as styleSpec} from '@maplibre/maplibre-gl-style-spec';
 import {DepthMode} from '../depth_mode.ts';
 import {StencilMode} from '../stencil_mode.ts';
 import {ColorMode} from '../color_mode.ts';
 import {CullFaceMode} from '../cull_face_mode.ts';
 import {
     heatmapUniformValues,
-    heatmapTextureUniformValues
+    heatmapTextureUniformValues,
+    heatmapLineUniformValues,
+    heatmapFillUniformValues,
+    heatmapBlurUniformValues
 } from '../program/heatmap_program.ts';
 import {HEATMAP_FULL_RENDER_FBO_KEY} from '../../style/style_layer/heatmap_style_layer.ts';
 import {getCameraMath} from '../../camera/camera_math_factory.ts';
+import {pixelsToTileUnits} from '../../source/pixels_to_tile_units.ts';
+import {EXTENT} from '../../data/extent.ts';
+import {clamp} from '../../util/util.ts';
 
 import type {FrameRenderContext} from '../../render/frame_render_context.ts';
 import type {Context} from '../context.ts';
@@ -21,13 +27,38 @@ import type {HeatmapStyleLayer} from '../../style/style_layer/heatmap_style_laye
 import type {HeatmapBucket} from '../../data/bucket/heatmap_bucket.ts';
 import type {OverscaledTileID} from '../../tile/tile_id.ts';
 
+/** How many times smaller than the screen the density texture is with `heatmap-geometry: vertices`. */
+const VERTICES_DENSITY_SCALE = 4;
+
+/**
+ * How many times smaller than the screen the density texture is with `heatmap-geometry: shapes`:
+ * finer than for vertices, so that polygon edges stay sharp when the radius is small.
+ */
+const SHAPES_DENSITY_SCALE = 2;
+
+/**
+ * The spread of the polygon blur in texels of its own textures. Their size is chosen from the
+ * radius so that the blur always spans about this many texels, which keeps its cost the same at
+ * every radius; the coverage is smooth enough at that point for a coarser texture to lose nothing.
+ */
+const POLYGON_BLUR_TEXELS = 3;
+
+/** The coarsest the polygon textures get, as a fraction of the screen. */
+const MAX_POLYGON_SCALE = 16;
+
+/** The radius polygons are blurred with when `heatmap-radius` depends on feature properties. */
+const DEFAULT_HEATMAP_RADIUS = styleSpec.paint_heatmap['heatmap-radius'].default;
+
+const POLYGON_COVERAGE_FBO_KEY = 'polygon-coverage';
+const POLYGON_BLUR_FBO_KEY = 'polygon-blur';
+
 export function drawHeatmap(painter: Painter, tileManager: TileManager, layer: HeatmapStyleLayer, tileIDs: OverscaledTileID[], frameRenderContext: FrameRenderContext): void {
     if (layer.paint.get('heatmap-opacity') === 0) {
         return;
     }
     const context = frameRenderContext.context;
 
-    if (frameRenderContext.terrain) {
+    if (frameRenderContext.terrain && !layer.drawsShapes()) {
         for (const coord of tileIDs) {
             const tile = tileManager.getTile(coord);
             // Skip tiles that have uncovered parents to avoid flickering; we don't need
@@ -51,7 +82,45 @@ export function drawHeatmap(painter: Painter, tileManager: TileManager, layer: H
     }
 }
 
+/** Additive blending, which is what turns overlapping kernels into a density. */
+function additiveColorMode(context: Context): ColorMode {
+    const gl = context.gl;
+    return new ColorMode([gl.ONE, gl.ONE], Color.transparent, [true, true, true, true]);
+}
+
+/**
+ * Returns the tiles to draw and their buckets, leaving out tiles that have a renderable parent:
+ * the parent is drawn until all its children are loaded, so nothing is counted twice.
+ */
+function bucketsToDraw(tileManager: TileManager, layer: HeatmapStyleLayer, coords: OverscaledTileID[]): Array<{coord: OverscaledTileID; tile: Tile; bucket: HeatmapBucket}> {
+    const result = [];
+    for (const coord of coords) {
+        if (tileManager.hasRenderableParent(coord)) continue;
+        const tile = tileManager.getTile(coord);
+        const bucket = tile.getBucket(layer) as HeatmapBucket;
+        if (bucket) result.push({coord, tile, bucket});
+    }
+    return result;
+}
+
 function prepareHeatmapFlat(painter: Painter, tileManager: TileManager, layer: HeatmapStyleLayer, coords: OverscaledTileID[], frameRenderContext: FrameRenderContext) {
+    const context = frameRenderContext.context;
+
+    if (layer.drawsShapes()) {
+        prepareShapesFlat(painter, tileManager, layer, coords, frameRenderContext);
+        context.viewport.set([0, 0, painter.width, painter.height]);
+        return;
+    }
+
+    bindFramebuffer(context, painter, layer);
+    context.clear({color: Color.transparent});
+    drawPointKernelsFlat(tileManager, layer, coords, frameRenderContext);
+
+    context.viewport.set([0, 0, painter.width, painter.height]);
+}
+
+/** Draws each point (or each vertex, with `heatmap-geometry: vertices`) as a kernel into the bound density texture. */
+function drawPointKernelsFlat(tileManager: TileManager, layer: HeatmapStyleLayer, coords: OverscaledTileID[], frameRenderContext: FrameRenderContext) {
     const context = frameRenderContext.context;
     const gl = context.gl;
     const projectedCamera = frameRenderContext.projectedCamera;
@@ -59,12 +128,7 @@ function prepareHeatmapFlat(painter: Painter, tileManager: TileManager, layer: H
     // Allow kernels to be drawn across boundaries, so that
     // large kernels are not clipped to tiles
     const stencilMode = StencilMode.disabled;
-    // Turn on additive blending for kernels, which is a key aspect of kernel density estimation formula
-    const colorMode = new ColorMode([gl.ONE, gl.ONE], Color.transparent, [true, true, true, true]);
-
-    bindFramebuffer(context, painter, layer);
-
-    context.clear({color: Color.transparent});
+    const colorMode = additiveColorMode(context);
 
     for (const coord of coords) {
 
@@ -86,13 +150,135 @@ function prepareHeatmapFlat(painter: Painter, tileManager: TileManager, layer: H
 
         program.draw(context, gl.TRIANGLES, DepthMode.disabled, stencilMode, colorMode, CullFaceMode.backCCW,
             heatmapUniformValues(tile, projectedCamera.zoom, layer.paint.get('heatmap-intensity'), radiusCorrectionFactor),
-            null, projectionData,
+            frameRenderContext.getTerrainDataForTile(coord), projectionData,
             layer.id, bucket.layoutVertexBuffer, bucket.indexBuffer,
             bucket.segments, layer.paint, projectedCamera.zoom,
             programConfiguration);
     }
+}
 
-    context.viewport.set([0, 0, painter.width, painter.height]);
+/**
+ * Builds the density texture of a layer with `heatmap-geometry: shapes`: polygons first, because
+ * their blur passes use framebuffers of their own and end by adding into the density texture, then
+ * lines and points straight into it.
+ *
+ * The texture is an image of the screen, with or without terrain: every vertex is projected at its
+ * elevation, so shapes that cross tiles land where the terrain puts them.
+ */
+function prepareShapesFlat(painter: Painter, tileManager: TileManager, layer: HeatmapStyleLayer, coords: OverscaledTileID[], frameRenderContext: FrameRenderContext) {
+    const context = frameRenderContext.context;
+    const width = Math.ceil(painter.width / SHAPES_DENSITY_SCALE);
+    const height = Math.ceil(painter.height / SHAPES_DENSITY_SCALE);
+    const density = layerFramebuffer(context, layer, HEATMAP_FULL_RENDER_FBO_KEY, width, height);
+    useFramebuffer(context, density);
+    context.clear({color: Color.transparent});
+
+    const buckets = bucketsToDraw(tileManager, layer, coords);
+    drawPolygonDensityFlat(painter, layer, buckets, density, frameRenderContext);
+
+    useFramebuffer(context, density);
+    drawLineKernels(layer, buckets, frameRenderContext);
+    drawPointKernelsFlat(tileManager, layer, coords, frameRenderContext);
+}
+
+/**
+ * Returns the radius, in pixels, that polygons are blurred with. Polygons are blurred once for the
+ * whole layer, so a radius that depends on feature properties gives way to its default.
+ */
+function polygonBlurRadius(layer: HeatmapStyleLayer): number {
+    return layer.paint.get('heatmap-radius').constantOr(DEFAULT_HEATMAP_RADIUS);
+}
+
+/** Returns the polygon blur's spread in screen pixels: a third of the radius, as for the point kernel. */
+function polygonBlurSigma(layer: HeatmapStyleLayer, frameRenderContext: FrameRenderContext): number {
+    return polygonBlurRadius(layer) / 3 * frameRenderContext.data.pixelRatio;
+}
+
+/**
+ * Draws polygon coverage into a texture sized from the blur, then blurs it in two passes, the
+ * second adding the result into `target`. Each tile holds only its own part of a polygon, so no
+ * part is drawn twice.
+ */
+function drawPolygonDensityFlat(painter: Painter, layer: HeatmapStyleLayer, buckets: ReturnType<typeof bucketsToDraw>, target: Framebuffer, frameRenderContext: FrameRenderContext) {
+    const withPolygons = buckets.filter(({bucket}) => bucket.fillSegments.get().length > 0);
+    if (!withPolygons.length) return;
+
+    const context = frameRenderContext.context;
+    const gl = context.gl;
+    const sigma = polygonBlurSigma(layer, frameRenderContext);
+    const scale = clamp(Math.round(sigma / POLYGON_BLUR_TEXELS), SHAPES_DENSITY_SCALE, MAX_POLYGON_SCALE);
+    const width = Math.ceil(painter.width / scale);
+    const height = Math.ceil(painter.height / scale);
+
+    const coverage = layerFramebuffer(context, layer, POLYGON_COVERAGE_FBO_KEY, width, height);
+    useFramebuffer(context, coverage);
+    context.clear({color: Color.transparent});
+
+    const zoom = frameRenderContext.projectedCamera.zoom;
+    const intensity = layer.paint.get('heatmap-intensity');
+    const colorMode = additiveColorMode(context);
+    for (const {coord, bucket} of withPolygons) {
+        const programConfiguration = bucket.fillProgramConfigurations.get(layer.id);
+        frameRenderContext.useProgram('heatmapFill', programConfiguration).draw(context, gl.TRIANGLES,
+            DepthMode.disabled, StencilMode.disabled, colorMode, CullFaceMode.disabled,
+            heatmapFillUniformValues(intensity), frameRenderContext.getTerrainDataForTile(coord), frameRenderContext.getProjectionDataForTile(coord, {applyTerrainMatrix: false}),
+            layer.id, bucket.fillLayoutVertexBuffer, bucket.fillIndexBuffer, bucket.fillSegments,
+            layer.paint, zoom, programConfiguration);
+    }
+
+    const blurred = layerFramebuffer(context, layer, POLYGON_BLUR_FBO_KEY, width, height);
+    blurPolygonCoverage(painter, layer, coverage, blurred, target, sigma / scale, frameRenderContext);
+}
+
+/**
+ * Blurs `coverage` horizontally into `scratch`, then vertically, adding the result into `target`.
+ * `sigma` is in texels of `coverage`; the target may be any size, since it samples with filtering.
+ */
+function blurPolygonCoverage(painter: Painter, layer: HeatmapStyleLayer, coverage: Framebuffer, scratch: Framebuffer, target: Framebuffer, sigma: number, frameRenderContext: FrameRenderContext) {
+    const context = frameRenderContext.context;
+    const gl = context.gl;
+    const program = frameRenderContext.useProgram('heatmapBlur');
+    const zoom = frameRenderContext.projectedCamera.zoom;
+
+    const pass = (source: Framebuffer, destination: Framebuffer, step: [number, number], colorMode: Readonly<ColorMode>) => {
+        useFramebuffer(context, destination);
+        context.activeTexture.set(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, source.colorAttachment.get());
+        program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, colorMode, CullFaceMode.disabled,
+            heatmapBlurUniformValues(0, step, sigma), null, null,
+            layer.id, painter.viewportBuffer, painter.quadTriangleIndexBuffer, painter.viewportSegments, layer.paint, zoom);
+    };
+
+    useFramebuffer(context, scratch);
+    context.clear({color: Color.transparent});
+    pass(coverage, scratch, [1 / coverage.width, 0], ColorMode.unblended);
+    pass(scratch, target, [0, 1 / scratch.height], additiveColorMode(context));
+}
+
+/** Draws each line segment's kernel into the bound density texture. */
+function drawLineKernels(layer: HeatmapStyleLayer, buckets: ReturnType<typeof bucketsToDraw>, frameRenderContext: FrameRenderContext) {
+    const context = frameRenderContext.context;
+    const gl = context.gl;
+    const projectedCamera = frameRenderContext.projectedCamera;
+    const cameraMath = getCameraMath(projectedCamera);
+    const intensity = layer.paint.get('heatmap-intensity');
+    const colorMode = additiveColorMode(context);
+
+    for (const {coord, tile, bucket} of buckets) {
+        if (!bucket.lineSegments.get().length) continue;
+
+        const programConfiguration = bucket.lineProgramConfigurations.get(layer.id);
+        const program = frameRenderContext.useProgram('heatmapLine', programConfiguration);
+        const projectionData = frameRenderContext.getProjectionDataForTile(coord, {applyTerrainMatrix: false});
+        const correction = cameraMath.getPitchedTextCorrection(projectedCamera, EXTENT / 2, EXTENT / 2, coord.toUnwrapped());
+        const extrudeScale = pixelsToTileUnits(tile, 1, projectedCamera.zoom) * correction;
+
+        program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, colorMode, CullFaceMode.disabled,
+            heatmapLineUniformValues(extrudeScale, intensity),
+            frameRenderContext.getTerrainDataForTile(coord), projectionData,
+            layer.id, bucket.lineLayoutVertexBuffer, bucket.lineIndexBuffer, bucket.lineSegments,
+            layer.paint, projectedCamera.zoom, programConfiguration);
+    }
 }
 
 function renderHeatmapFlat(painter: Painter, layer: HeatmapStyleLayer, frameRenderContext: FrameRenderContext) {
@@ -196,17 +382,40 @@ function bindFramebuffer(context: Context, painter: Painter, layer: HeatmapStyle
     context.activeTexture.set(gl.TEXTURE1);
 
     // Use a 4x downscaled screen texture for better performance
-    context.viewport.set([0, 0, painter.width / 4, painter.height / 4]);
+    const width = painter.width / VERTICES_DENSITY_SCALE;
+    const height = painter.height / VERTICES_DENSITY_SCALE;
+    context.viewport.set([0, 0, width, height]);
 
     let fbo = layer.heatmapFbos.get(HEATMAP_FULL_RENDER_FBO_KEY);
 
+    if (fbo && (fbo.width !== width || fbo.height !== height)) {
+        fbo.destroy();
+        fbo = undefined;
+    }
+
     if (!fbo) {
-        fbo = createHeatmapFbo(context, painter.width / 4, painter.height / 4);
+        fbo = createHeatmapFbo(context, width, height);
         layer.heatmapFbos.set(HEATMAP_FULL_RENDER_FBO_KEY, fbo);
     } else {
         gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
         context.bindFramebuffer.set(fbo.framebuffer);
     }
+}
+
+/** Returns the layer's framebuffer under `key`, creating it, or replacing one of another size. */
+function layerFramebuffer(context: Context, layer: HeatmapStyleLayer, key: string, width: number, height: number): Framebuffer {
+    let fbo = layer.heatmapFbos.get(key);
+    if (fbo?.width === width && fbo.height === height) return fbo;
+
+    fbo?.destroy();
+    fbo = createHeatmapFbo(context, width, height);
+    layer.heatmapFbos.set(key, fbo);
+    return fbo;
+}
+
+function useFramebuffer(context: Context, fbo: Framebuffer) {
+    context.bindFramebuffer.set(fbo.framebuffer);
+    context.viewport.set([0, 0, fbo.width, fbo.height]);
 }
 
 function createHeatmapFbo(context: Context, width: number, height: number): Framebuffer {

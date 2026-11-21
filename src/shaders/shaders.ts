@@ -14,6 +14,12 @@ import heatmapFrag from './glsl/heatmap.fragment.glsl.g.ts';
 import heatmapVert from './glsl/heatmap.vertex.glsl.g.ts';
 import heatmapTextureFrag from './glsl/heatmap_texture.fragment.glsl.g.ts';
 import heatmapTextureVert from './glsl/heatmap_texture.vertex.glsl.g.ts';
+import heatmapLineFrag from './glsl/heatmap_line.fragment.glsl.g.ts';
+import heatmapLineVert from './glsl/heatmap_line.vertex.glsl.g.ts';
+import heatmapFillFrag from './glsl/heatmap_fill.fragment.glsl.g.ts';
+import heatmapFillVert from './glsl/heatmap_fill.vertex.glsl.g.ts';
+import heatmapBlurFrag from './glsl/heatmap_blur.fragment.glsl.g.ts';
+import heatmapBlurVert from './glsl/heatmap_blur.vertex.glsl.g.ts';
 import collisionBoxFrag from './glsl/collision_box.fragment.glsl.g.ts';
 import collisionBoxVert from './glsl/collision_box.vertex.glsl.g.ts';
 import collisionCircleFrag from './glsl/collision_circle.fragment.glsl.g.ts';
@@ -91,6 +97,9 @@ export const shaders: {
     clippingMask: PreparedShader;
     heatmap: PreparedShader;
     heatmapTexture: PreparedShader;
+    heatmapLine: PreparedShader;
+    heatmapFill: PreparedShader;
+    heatmapBlur: PreparedShader;
     collisionBox: PreparedShader;
     collisionCircle: PreparedShader;
     colorRelief: PreparedShader;
@@ -129,6 +138,9 @@ export const shaders: {
     clippingMask: prepare(clippingMaskFrag, clippingMaskVert),
     heatmap: prepare(heatmapFrag, heatmapVert),
     heatmapTexture: prepare(heatmapTextureFrag, heatmapTextureVert),
+    heatmapLine: prepare(heatmapLineFrag, heatmapLineVert),
+    heatmapFill: prepare(heatmapFillFrag, heatmapFillVert),
+    heatmapBlur: prepare(heatmapBlurFrag, heatmapBlurVert),
     collisionBox: prepare(collisionBoxFrag, collisionBoxVert),
     collisionCircle: prepare(collisionCircleFrag, collisionCircleVert),
     colorRelief: prepare(colorReliefFrag, colorReliefVert),

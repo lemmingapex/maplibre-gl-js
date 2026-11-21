@@ -1,14 +1,15 @@
 import {type QueryIntersectsFeatureParams, StyleLayer} from '../style_layer.ts';
 import {HeatmapBucket} from '../../data/bucket/heatmap_bucket.ts';
-import properties, {type HeatmapPaintPropsPossiblyEvaluated} from './heatmap_style_layer_properties.g.ts';
+import properties, {type HeatmapLayoutPropsPossiblyEvaluated, type HeatmapPaintPropsPossiblyEvaluated} from './heatmap_style_layer_properties.g.ts';
 import {renderColorRamp} from '../../util/color_ramp.ts';
 import {circleIntersection, getMaximumPaintValue} from '../query_utils.ts';
+import {polygonIntersectsBufferedMultiLine, polygonIntersectsMultiPolygon} from '../../util/intersection_tests.ts';
 
-import type {Transitionable, Transitioning, PossiblyEvaluated} from '../properties.ts';
+import type {Transitionable, Transitioning, Layout, PossiblyEvaluated} from '../properties.ts';
 import type {RGBAImage} from '../../util/image.ts';
 import type {Texture} from '../../webgl/texture.ts';
 import type {Framebuffer} from '../../webgl/framebuffer.ts';
-import type {HeatmapPaintProps} from './heatmap_style_layer_properties.g.ts';
+import type {HeatmapLayoutProps, HeatmapPaintProps} from './heatmap_style_layer_properties.g.ts';
 import type {LayerSpecification} from '@maplibre/maplibre-gl-style-spec';
 import type {Bucket} from '../../data/bucket.ts';
 
@@ -24,6 +25,9 @@ export class HeatmapStyleLayer extends StyleLayer {
     heatmapFbos: Map<string, Framebuffer>;
     colorRamp: RGBAImage;
     colorRampTexture: Texture;
+
+    _unevaluatedLayout: Layout<HeatmapLayoutProps>;
+    layout: PossiblyEvaluated<HeatmapLayoutProps, HeatmapLayoutPropsPossiblyEvaluated>;
 
     _transitionablePaint: Transitionable<HeatmapPaintProps>;
     _transitioningPaint: Transitioning<HeatmapPaintProps>;
@@ -63,10 +67,25 @@ export class HeatmapStyleLayer extends StyleLayer {
         }
     }
 
-    queryRadius(bucket: Bucket): number {
-        return getMaximumPaintValue('heatmap-radius', this, bucket as HeatmapBucket);
+    /** Whether lines and polygons are drawn along their length and over their area, rather than at their vertices. */
+    drawsShapes(): boolean {
+        return this.layout.get('heatmap-geometry') === 'shapes';
     }
 
+    queryRadius(bucket: Bucket): number {
+        const heatmapBucket = bucket as HeatmapBucket;
+        const pointRadius = getMaximumPaintValue('heatmap-radius', this, heatmapBucket);
+        if (!this.drawsShapes() || this.paint.get('heatmap-radius').value.kind === 'constant') return pointRadius;
+
+        return Math.max(pointRadius,
+            heatmapBucket.lineProgramConfigurations.get(this.id).getMaxValue('heatmap-radius'),
+            heatmapBucket.fillProgramConfigurations.get(this.id).getMaxValue('heatmap-radius'));
+    }
+
+    /**
+     * With `heatmap-geometry: shapes`, a polygon is hit anywhere inside it and a line anywhere within
+     * its radius; points, and every feature with `vertices`, are hit within the radius of a vertex.
+     */
     queryIntersectsFeature({
         queryGeometry,
         feature,
@@ -77,9 +96,13 @@ export class HeatmapStyleLayer extends StyleLayer {
         unwrappedTileID,
         getElevation}: QueryIntersectsFeatureParams
     ): boolean {
+        const radius = this.paint.get('heatmap-radius').evaluate(feature, featureState) * pixelsToTileUnits;
+        if (this.drawsShapes() && feature.type === 3) return polygonIntersectsMultiPolygon(queryGeometry, geometry);
+        if (this.drawsShapes() && feature.type === 2) return polygonIntersectsBufferedMultiLine(queryGeometry, geometry, radius);
+
         return circleIntersection({
             queryGeometry,
-            size: this.paint.get('heatmap-radius').evaluate(feature, featureState) * pixelsToTileUnits,
+            size: radius,
             projectedCamera,
             unwrappedTileID,
             getElevation

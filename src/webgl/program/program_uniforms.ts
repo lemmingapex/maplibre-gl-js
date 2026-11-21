@@ -2,7 +2,7 @@ import {fillExtrusionUniforms, fillExtrusionPatternUniforms, type FillExtrusionU
 import {fillPatternUniforms, fillOutlineUniforms, fillOutlinePatternUniforms, fillUniforms, type FillUniformsType, type FillPatternUniformsType, type FillOutlineUniformsType, type FillOutlinePatternUniformsType} from './fill_program.ts';
 import {circleUniforms, type CircleUniformsType} from './circle_program.ts';
 import {debugUniforms, type DebugUniformsType} from './debug_program.ts';
-import {heatmapUniforms, heatmapTextureUniforms, type HeatmapUniformsType, type HeatmapTextureUniformsType} from './heatmap_program.ts';
+import {heatmapUniforms, heatmapTextureUniforms, heatmapLineUniforms, heatmapFillUniforms, heatmapBlurUniforms, type HeatmapUniformsType, type HeatmapTextureUniformsType, type HeatmapLineUniformsType, type HeatmapFillUniformsType, type HeatmapBlurUniformsType} from './heatmap_program.ts';
 import {hillshadeUniforms, hillshadePrepareUniforms, type HillshadeUniformsType, type HillshadePrepareUniformsType} from './hillshade_program.ts';
 import {colorReliefUniforms, type ColorReliefUniformsType} from './color_relief_program.ts';
 import {lineUniforms, lineGradientUniforms, linePatternUniforms, lineSDFUniforms, lineGradientSDFUniforms, type LineUniformsType, type LineGradientUniformsType, type LinePatternUniformsType, type LineSDFUniformsType, type LineGradientSDFUniformsType} from './line_program.ts';
@@ -36,6 +36,9 @@ export const programUniforms: {
     clippingMask: (context: Context, locations: UniformLocations) => EmptyUniforms;
     heatmap: (context: Context, locations: UniformLocations) => HeatmapUniformsType;
     heatmapTexture: (context: Context, locations: UniformLocations) => HeatmapTextureUniformsType;
+    heatmapLine: (context: Context, locations: UniformLocations) => HeatmapLineUniformsType;
+    heatmapFill: (context: Context, locations: UniformLocations) => HeatmapFillUniformsType;
+    heatmapBlur: (context: Context, locations: UniformLocations) => HeatmapBlurUniformsType;
     hillshade: (context: Context, locations: UniformLocations) => HillshadeUniformsType;
     hillshadePrepare: (context: Context, locations: UniformLocations) => HillshadePrepareUniformsType;
     colorRelief: (context: Context, locations: UniformLocations) => ColorReliefUniformsType;
@@ -71,6 +74,9 @@ export const programUniforms: {
     clippingMask: emptyUniforms,
     heatmap: heatmapUniforms,
     heatmapTexture: heatmapTextureUniforms,
+    heatmapLine: heatmapLineUniforms,
+    heatmapFill: heatmapFillUniforms,
+    heatmapBlur: heatmapBlurUniforms,
     hillshade: hillshadeUniforms,
     hillshadePrepare: hillshadePrepareUniforms,
     colorRelief: colorReliefUniforms,

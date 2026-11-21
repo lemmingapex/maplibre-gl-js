@@ -1,0 +1,58 @@
+{
+  "version": 8,
+  "metadata": {
+    "test": {
+      "width": 512,
+      "height": 512
+    }
+  },
+  "center": [
+    13.418056,
+    52.499167
+  ],
+  "zoom": 14,
+  "sources": {
+    "maplibre": {
+      "type": "vector",
+      "maxzoom": 14,
+      "tiles": [
+        "local://tiles/{z}-{x}-{y}.mvt"
+      ]
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "white"
+      }
+    },
+    {
+      "id": "landuse",
+      "type": "heatmap",
+      "source": "maplibre",
+      "source-layer": "landuse",
+      "layout": {
+        "heatmap-geometry": "shapes"
+      },
+      "paint": {
+        "heatmap-radius": 6,
+        "heatmap-intensity": 0.5
+      }
+    },
+    {
+      "id": "road",
+      "type": "heatmap",
+      "source": "maplibre",
+      "source-layer": "road",
+      "layout": {
+        "heatmap-geometry": "shapes"
+      },
+      "paint": {
+        "heatmap-radius": 3,
+        "heatmap-intensity": 0.35
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 ## main
 ### ✨ Features and improvements
+- Add `heatmap-geometry: shapes`, so a heatmap spreads lines along their length and polygons over their area instead of only at their vertices
 - _...Add new stuff here..._
 
 ### 🐞 Bug fixes

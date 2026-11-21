@@ -1,0 +1,152 @@
+{
+  "version": 8,
+  "metadata": {
+    "test": {
+      "width": 256,
+      "height": 256
+    }
+  },
+  "center": [
+    0,
+    0
+  ],
+  "zoom": 3,
+  "sources": {
+    "geojson": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "w": 1
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -20,
+                  -6
+                ],
+                [
+                  20,
+                  -6
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "w": 0.4
+            },
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -20,
+                  6
+                ],
+                [
+                  20,
+                  6
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "w": 0.4
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    -9,
+                    -3
+                  ],
+                  [
+                    -3,
+                    -3
+                  ],
+                  [
+                    -3,
+                    3
+                  ],
+                  [
+                    -9,
+                    3
+                  ],
+                  [
+                    -9,
+                    -3
+                  ]
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "properties": {
+              "w": 1
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    3,
+                    -3
+                  ],
+                  [
+                    9,
+                    -3
+                  ],
+                  [
+                    9,
+                    3
+                  ],
+                  [
+                    3,
+                    3
+                  ],
+                  [
+                    3,
+                    -3
+                  ]
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "white"
+      }
+    },
+    {
+      "id": "heatmap",
+      "type": "heatmap",
+      "source": "geojson",
+      "paint": {
+        "heatmap-radius": 10,
+        "heatmap-weight": [
+          "get",
+          "w"
+        ]
+      },
+      "layout": {
+        "heatmap-geometry": "shapes"
+      }
+    }
+  ]
+}
