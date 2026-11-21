@@ -20,6 +20,7 @@ import fillExtrusionAttributes from '../src/data/bucket/fill_extrusion_attribute
 import heatmapLineAttributes from '../src/data/bucket/heatmap_line_attributes.ts';
 import {lineLayoutAttributes} from '../src/data/bucket/line_attributes.ts';
 import {lineLayoutAttributesExt} from '../src/data/bucket/line_attributes_ext.ts';
+import {lineLayoutAttributesOffset} from '../src/data/bucket/line_attributes_offset.ts';
 import {patternAttributes} from '../src/data/bucket/pattern_attributes.ts';
 import {dashAttributes} from '../src/data/bucket/dash_attributes.ts';
 // symbol layer specific arrays
@@ -147,6 +148,7 @@ const layoutAttributes = {
     'heatmap-line': heatmapLineAttributes,
     line: lineLayoutAttributes,
     lineExt: lineLayoutAttributesExt,
+    lineOffset: lineLayoutAttributesOffset,
     pattern: patternAttributes,
     dash: dashAttributes
 };
