@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <title>Create a heatmap of lines and polygons</title>
-    <meta property="og:description" content="Show where Atlantic storm tracks and wind swaths overlap, spreading lines along their length and polygons over their area." />
+    <meta property="og:description" content="Combine storm landfalls, tracks and wind swaths into one heatmap, spreading lines along their length and polygons over their area, and weight each kind of geometry separately." />
     <meta property="og:category" content="Heatmaps & Clusters" />
     <meta property="og:order" content="3" />
     <meta property="og:created" content="2026-11-21" />
@@ -17,28 +17,33 @@
             position: absolute; top: 10px; left: 10px; width: 270px; max-height: calc(100% - 40px); overflow-y: auto;
             padding: 10px 12px; background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
-        summary { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #666; margin: 12px 0 4px; border-top: 1px solid #ddd; padding-top: 10px; cursor: pointer; }
+        h1 { font-size: 14px; margin: 0 0 2px; }
+        p { margin: 0 0 4px; color: #555; }
+        summary { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #666; margin: 12px 0 6px; border-top: 1px solid #ddd; padding-top: 10px; cursor: pointer; }
         .row { margin: 4px 0 10px; }
-        .row:last-child { margin-bottom: 0; }
-        .row label { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 4px; }
+        .row label { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 4px; }
         .row label output { font-weight: 400; color: #555; }
+        .row label input[type=checkbox] { margin: 0 6px 0 0; }
+        .row label span { flex: 1; }
         .seg { display: flex; gap: 4px; }
         .seg button { flex: 1; padding: 4px 6px; border: 1px solid #bbb; background: #fff; border-radius: 4px; cursor: pointer; font: inherit; }
         .seg button.on { background: #222; color: #fff; border-color: #222; }
+        .seg button:disabled { opacity: 0.4; cursor: default; }
         input[type=range], select { width: 100%; margin: 0; }
+        input[type=range]:disabled { opacity: 0.4; }
+        #wind { margin-top: 6px; }
         #ramp { height: 8px; border-radius: 2px; margin-top: 6px; }
+        @media (max-width: 700px) {
+            #panel { width: 220px; }
+            #panel p { display: none; }
+        }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="panel">
-    <div class="row">
-        <label>Atlantic storms, 2009–2026</label>
-        <div class="seg" id="data">
-            <button data-layer="tracks" class="on">Tracks (lines)</button>
-            <button data-layer="swaths">Swaths (polygons)</button>
-        </div>
-    </div>
+    <h1>Atlantic storms, <span style="white-space: nowrap">2009–2025</span></h1>
+    <p>One heatmap layer: landfalls, tracks and wind swaths add into a single surface.</p>
     <div class="row">
         <label>heatmap-geometry</label>
         <div class="seg" id="geometry">
@@ -46,6 +51,27 @@
             <button data-geometry="vertices">vertices</button>
         </div>
     </div>
+
+    <details id="geometries" open>
+    <summary>Geometries</summary>
+    <div class="row">
+        <label><input type="checkbox" data-type="Point" checked><span>Landfalls (points)</span><output id="Point-value"></output></label>
+        <input type="range" id="Point" min="0.1" max="5" step="0.1" aria-label="Landfall weight">
+    </div>
+    <div class="row">
+        <label><input type="checkbox" data-type="LineString" checked><span>Tracks (lines)</span><output id="LineString-value"></output></label>
+        <input type="range" id="LineString" min="0.1" max="5" step="0.1" aria-label="Track weight">
+    </div>
+    <div class="row">
+        <label><input type="checkbox" data-type="Polygon" checked><span>Wind swaths (polygons)</span><output id="Polygon-value"></output></label>
+        <input type="range" id="Polygon" min="0.1" max="5" step="0.1" aria-label="Wind swath weight">
+        <div class="seg" id="wind">
+            <button data-kt="34">34 kt</button>
+            <button data-kt="50">50 kt</button>
+            <button data-kt="64" class="on">64 kt</button>
+        </div>
+    </div>
+    </details>
 
     <details id="appearance" open>
     <summary>Appearance</summary>
@@ -55,14 +81,14 @@
     </div>
     <div class="row">
         <label for="top">Top colour at <output id="top-value"></output></label>
-        <input id="top" type="range" min="1" max="60" step="1">
+        <input id="top" type="range" min="1" max="100" step="1">
     </div>
     <div class="row">
         <label for="opacity">Opacity <output id="opacity-value"></output></label>
         <input id="opacity" type="range" min="0" max="1" step="0.05">
     </div>
     <div class="row">
-        <label>Weight</label>
+        <label>Storm weight</label>
         <div class="seg" id="weight">
             <button data-weight="equal" class="on">Every storm 1</button>
             <button data-weight="category">Peak category</button>
@@ -84,22 +110,26 @@
 <script type="module">
     import * as maplibregl from '../../dist/maplibre-gl-dev.mjs';
 
-    const LAYERS = ['tracks', 'swaths'];
+    const TYPES = ['Point', 'LineString', 'Polygon'];
 
-    // Each layer keeps its own radius, scale and opacity, since tracks and swaths read best with
-    // different values. `top` is the density that reaches the top of the colour ramp: with
-    // `heatmap-geometry: shapes`, a long line or a polygon adds weight times intensity, so an
-    // intensity of 1 / top colours a spot covered by `top` storms of weight 1 at the top.
-    const settings = {
-        tracks: {radius: 20, top: 10, opacity: 0.85},
-        swaths: {radius: 20, top: 30, opacity: 0.85}
+    // With `heatmap-geometry: shapes`, a long line and the inside of a polygon add their full weight
+    // times the intensity, while a point's kernel peaks at 0.4 of its weight. Landfalls start at 2.5,
+    // so that one landfall, one track and one swath each count about the same. `top` is the density
+    // that reaches the top of the colour ramp, set through an intensity of 1 / top.
+    const state = {
+        included: new Set(TYPES),
+        typeWeights: {Point: 2.5, LineString: 1, Polygon: 1},
+        windKts: new Set([64]),
+        stormWeight: 'equal',
+        radius: 15,
+        top: 15,
+        opacity: 0.85
     };
-    let current = 'tracks';
 
-    const WEIGHTS = {
+    const STORM_WEIGHTS = {
         equal: 1,
         // Tropical storms count 0.5 and a category 5 hurricane counts 3.
-        category: ['+', 0.5, ['*', 0.5, ['get', 'max_category']]]
+        category: ['+', 0.5, ['*', 0.5, ['get', 'category']]]
     };
 
     const RAMPS = {
@@ -119,8 +149,39 @@
         blues: 'linear-gradient(to right, rgba(222,235,247,0), #c6dbef 20%, #6baed6 50%, #2171b5 80%, #08306b)'
     };
 
-    // Leave the appearance controls folded on small screens, so the map stays visible.
-    if (window.innerWidth < 700) document.getElementById('appearance').open = false;
+    /** Picks a value by a feature's geometry type, whether its geometry is single or multi-part. */
+    function byGeometryType(values, fallback) {
+        return ['match', ['geometry-type'],
+            ['Point', 'MultiPoint'], values.Point,
+            ['LineString', 'MultiLineString'], values.LineString,
+            ['Polygon', 'MultiPolygon'], values.Polygon,
+            fallback];
+    }
+
+    /**
+     * The geometry types that are switched on, and of the swaths only those of the chosen wind speeds.
+     * The swaths of one storm nest inside each other, so with several speeds on, a spot that saw
+     * hurricane-force winds counts once for each speed.
+     */
+    function filter() {
+        const swaths = state.included.has('Polygon') && state.windKts.size > 0;
+        return byGeometryType({
+            Point: state.included.has('Point'),
+            LineString: state.included.has('LineString'),
+            Polygon: swaths ? ['in', ['get', 'wind_kt'], ['literal', [...state.windKts]]] : false
+        }, false);
+    }
+
+    /** Each feature's weight: its geometry type's weight, times its storm's weight. */
+    function weight() {
+        return ['*', byGeometryType(state.typeWeights, 0), STORM_WEIGHTS[state.stormWeight]];
+    }
+
+    // Leave the controls folded on small screens, so the map stays visible.
+    if (window.innerWidth < 700) {
+        document.getElementById('geometries').open = false;
+        document.getElementById('appearance').open = false;
+    }
 
     const map = new maplibregl.Map({
         container: 'map',
@@ -132,40 +193,45 @@
     map.on('load', () => {
         const firstLabel = map.getStyle().layers.find(layer => layer.type === 'symbol').id;
 
-        // Tracks and swaths derived from NOAA National Hurricane Center best-track data.
-        map.addSource('tracks', {type: 'geojson', data: '../../docs/assets/atlantic-storm-tracks.geojson'});
-        map.addSource('swaths', {type: 'geojson', data: '../../docs/assets/atlantic-wind-swaths.geojson'});
+        // Landfalls, tracks and wind swaths derived from NOAA National Hurricane Center best-track data.
+        map.addSource('storms', {type: 'geojson', data: '../../docs/assets/atlantic-storms.geojson'});
 
-        for (const id of LAYERS) {
-            const {radius, top, opacity} = settings[id];
-            map.addLayer({
-                id,
-                type: 'heatmap',
-                source: id,
-                // The swaths file holds 34, 50 and 64 kt swaths; show the tropical-storm ones.
-                ...(id === 'swaths' ? {filter: ['==', ['get', 'wind_kt'], 34]} : {}),
-                layout: {'heatmap-geometry': 'shapes', 'visibility': id === current ? 'visible' : 'none'},
-                paint: {
-                    'heatmap-radius': radius,
-                    'heatmap-intensity': 1 / top,
-                    'heatmap-opacity': opacity
-                }
-            }, firstLabel);
-        }
+        map.addLayer({
+            id: 'storms',
+            type: 'heatmap',
+            source: 'storms',
+            filter: filter(),
+            layout: {'heatmap-geometry': 'shapes'},
+            paint: {
+                'heatmap-weight': weight(),
+                'heatmap-radius': state.radius,
+                'heatmap-intensity': 1 / state.top,
+                'heatmap-opacity': state.opacity
+            }
+        }, firstLabel);
 
         wireControls();
-        showSettings();
+        show();
     });
 
-    /** Moves the sliders to the visible layer's settings. */
-    function showSettings() {
-        const {radius, top, opacity} = settings[current];
-        document.getElementById('radius').value = radius;
-        document.getElementById('top').value = top;
-        document.getElementById('opacity').value = opacity;
-        document.getElementById('radius-value').textContent = `${radius} px`;
-        document.getElementById('top-value').textContent = `${top} storms`;
-        document.getElementById('opacity-value').textContent = opacity.toFixed(2);
+    /** Moves the controls to the current settings. */
+    function show() {
+        for (const type of TYPES) {
+            const slider = document.getElementById(type);
+            slider.value = state.typeWeights[type];
+            slider.disabled = !state.included.has(type);
+            document.getElementById(`${type}-value`).textContent = `× ${state.typeWeights[type].toFixed(1)}`;
+        }
+        for (const button of document.querySelectorAll('#wind button')) {
+            button.disabled = !state.included.has('Polygon');
+            button.classList.toggle('on', state.windKts.has(Number(button.dataset.kt)));
+        }
+        document.getElementById('radius').value = state.radius;
+        document.getElementById('radius-value').textContent = `${state.radius} px`;
+        document.getElementById('top').value = state.top;
+        document.getElementById('top-value').textContent = `${state.top}`;
+        document.getElementById('opacity').value = state.opacity;
+        document.getElementById('opacity-value').textContent = state.opacity.toFixed(2);
     }
 
     function choose(groupId, apply) {
@@ -181,45 +247,66 @@
     function slider(id, apply) {
         document.getElementById(id).addEventListener('input', (event) => {
             apply(Number(event.target.value));
-            showSettings();
+            show();
         });
     }
 
     function wireControls() {
-        choose('data', ({layer}) => {
-            current = layer;
-            for (const id of LAYERS) map.setLayoutProperty(id, 'visibility', id === current ? 'visible' : 'none');
-            showSettings();
+        choose('geometry', ({geometry}) => {
+            map.setLayoutProperty('storms', 'heatmap-geometry', geometry);
         });
 
-        choose('geometry', ({geometry}) => {
-            for (const id of LAYERS) map.setLayoutProperty(id, 'heatmap-geometry', geometry);
-        });
+        for (const checkbox of document.querySelectorAll('input[type=checkbox][data-type]')) {
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) state.included.add(checkbox.dataset.type);
+                else state.included.delete(checkbox.dataset.type);
+                map.setFilter('storms', filter());
+                show();
+            });
+        }
+
+        for (const type of TYPES) {
+            slider(type, (value) => {
+                state.typeWeights[type] = value;
+                map.setPaintProperty('storms', 'heatmap-weight', weight());
+            });
+        }
+
+        for (const button of document.querySelectorAll('#wind button')) {
+            button.addEventListener('click', () => {
+                const kt = Number(button.dataset.kt);
+                if (state.windKts.has(kt)) state.windKts.delete(kt);
+                else state.windKts.add(kt);
+                map.setFilter('storms', filter());
+                show();
+            });
+        }
 
         slider('radius', (radius) => {
-            settings[current].radius = radius;
-            map.setPaintProperty(current, 'heatmap-radius', radius);
+            state.radius = radius;
+            map.setPaintProperty('storms', 'heatmap-radius', radius);
         });
 
         slider('top', (top) => {
-            settings[current].top = top;
-            map.setPaintProperty(current, 'heatmap-intensity', 1 / top);
+            state.top = top;
+            map.setPaintProperty('storms', 'heatmap-intensity', 1 / top);
         });
 
         slider('opacity', (opacity) => {
-            settings[current].opacity = opacity;
-            map.setPaintProperty(current, 'heatmap-opacity', opacity);
+            state.opacity = opacity;
+            map.setPaintProperty('storms', 'heatmap-opacity', opacity);
         });
 
-        choose('weight', ({weight}) => {
-            for (const id of LAYERS) map.setPaintProperty(id, 'heatmap-weight', WEIGHTS[weight]);
+        choose('weight', ({weight: stormWeight}) => {
+            state.stormWeight = stormWeight;
+            map.setPaintProperty('storms', 'heatmap-weight', weight());
         });
 
         const colors = document.getElementById('colors');
         const ramp = document.getElementById('ramp');
         ramp.style.background = RAMP_PREVIEWS.default;
         colors.addEventListener('change', () => {
-            for (const id of LAYERS) map.setPaintProperty(id, 'heatmap-color', RAMPS[colors.value]);
+            map.setPaintProperty('storms', 'heatmap-color', RAMPS[colors.value]);
             ramp.style.background = RAMP_PREVIEWS[colors.value];
         });
     }
