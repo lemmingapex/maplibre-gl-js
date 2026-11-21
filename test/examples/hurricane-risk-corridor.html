@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Hurricane risk corridor</title>
+    <meta property="og:description" content="Count how many Atlantic hurricane wind swaths covered each place, with a fill heatmap layer." />
+    <meta property="og:category" content="Heatmaps & Clusters" />
+    <meta property="og:order" content="4" />
+    <meta property="og:created" content="2026-11-21" />
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='../../dist/maplibre-gl.css' />
+
+    <style>
+        body { margin: 0; padding: 0; font: 13px/1.4 system-ui, sans-serif; }
+        html, body, #map { height: 100%; }
+        #panel {
+            position: absolute; top: 10px; left: 10px; width: 280px; padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        }
+        #panel h1 { font-size: 15px; margin: 0 0 4px; }
+        #panel p { margin: 0 0 10px; color: #555; }
+        .row { margin: 10px 0; }
+        .row label { display: block; font-weight: 600; margin-bottom: 4px; }
+        .seg { display: flex; gap: 4px; }
+        .seg button {
+            flex: 1; padding: 5px 4px; border: 1px solid #bbb; background: #fff; border-radius: 4px; cursor: pointer; font: inherit;
+        }
+        .seg button.on { background: #222; color: #fff; border-color: #222; }
+        input[type=range] { width: 100%; }
+        #legend { height: 10px; border-radius: 2px; margin-top: 4px;
+            background: linear-gradient(to right, rgba(255,255,178,0), #fed976, #feb24c, #fd8d3c, #f03b20, #bd0026); }
+        #legend-labels { display: flex; justify-content: space-between; color: #555; font-size: 11px; }
+        #credit { font-size: 11px; color: #777; margin-top: 10px; }
+        @media (max-width: 700px) {
+            #panel { width: 210px; padding: 8px 10px; font-size: 12px; }
+            #panel p, #credit, #scale-row > label, #scale-row > input { display: none; }
+            .row { margin: 6px 0; }
+            .seg button { padding: 3px 2px; }
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+    <h1>Hurricane risk corridor</h1>
+    <p>Atlantic tropical storm and hurricane wind swaths, <span id="year-span"></span>. Each swath is the area that saw sustained winds at or above the chosen speed.</p>
+
+    <div class="row">
+        <label>Show swaths as</label>
+        <div class="seg" id="mode">
+            <button data-mode="outlines">Outlines</button>
+            <button data-mode="points">Point heatmap</button>
+            <button data-mode="polygons" class="on">Polygon heatmap</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <label>Sustained wind</label>
+        <div class="seg" id="wind">
+            <button data-kt="34" class="on">34 kt</button>
+            <button data-kt="50">50 kt</button>
+            <button data-kt="64">64 kt (hurricane)</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <label>Since <span id="since-value"></span></label>
+        <input id="since" type="range" min="2009" max="2026" value="2009">
+    </div>
+
+    <div class="row" id="scale-row">
+        <label>Storms for the top colour: <span id="limit-value"></span></label>
+        <input id="limit" type="range" min="2" max="60" value="30">
+        <div id="legend"></div>
+        <div id="legend-labels"><span>0</span><span id="legend-max"></span></div>
+    </div>
+
+    <div id="credit">Derived from NOAA National Hurricane Center best-track wind swaths, 2009–2026, simplified to about 5 km. Not an official NOAA product.</div>
+</div>
+
+<script type="module">
+    import * as maplibregl from '../../dist/maplibre-gl-dev.mjs';
+
+    /** Storm counts that reach the top colour for each wind speed, chosen so the coast is not washed out. */
+    const defaultLimits = {34: 30, 50: 15, 64: 8};
+    const state = {mode: 'polygons', kt: 34, since: 2009, limit: defaultLimits[34]};
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/positron',
+        center: [-78, 31],
+        zoom: 3.6,
+        hash: true
+    });
+
+    /** Returns the filter that keeps swaths of the chosen wind speed from the chosen year on. */
+    function swathFilter() {
+        return ['all', ['==', ['get', 'wind_kt'], state.kt], ['>=', ['get', 'year'], state.since]];
+    }
+
+    /** Shows the layer for the chosen mode, hides the others, and applies the current filter and scale. */
+    function render() {
+        const visible = {
+            'swath-fill': state.mode === 'outlines',
+            'swath-outline': state.mode === 'outlines',
+            'swath-points': state.mode === 'points',
+            'swath-density': state.mode === 'polygons'
+        };
+        for (const [id, on] of Object.entries(visible)) {
+            map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+            map.setFilter(id, swathFilter());
+        }
+        map.setPaintProperty('swath-density', 'fill-heatmap-limit-count', state.limit);
+
+        document.getElementById('since-value').textContent = state.since;
+        document.getElementById('year-span').textContent = `${state.since}–2026`;
+        document.getElementById('limit-value').textContent = state.limit;
+        document.getElementById('legend-max').textContent = `${state.limit}+ storms`;
+        document.getElementById('scale-row').style.display = state.mode === 'polygons' ? '' : 'none';
+    }
+
+    /** Wires a row of buttons so that clicking one marks it and stores its value. */
+    function segmented(id, key, parse) {
+        const buttons = document.querySelectorAll(`#${id} button`);
+        for (const button of buttons) {
+            button.addEventListener('click', () => {
+                for (const other of buttons) other.classList.toggle('on', other === button);
+                state[key] = parse(button);
+                render();
+            });
+        }
+    }
+
+    map.on('load', () => {
+        const firstLabel = map.getStyle().layers.find(layer => layer.type === 'symbol').id;
+
+        map.addSource('swaths', {type: 'geojson', data: '../../docs/assets/atlantic-wind-swaths.geojson'});
+
+        map.addLayer({
+            id: 'swath-fill', type: 'fill', source: 'swaths',
+            paint: {'fill-color': '#d7301f', 'fill-opacity': 0.06}
+        }, firstLabel);
+        map.addLayer({
+            id: 'swath-outline', type: 'line', source: 'swaths',
+            paint: {'line-color': '#d7301f', 'line-width': 0.6, 'line-opacity': 0.5}
+        }, firstLabel);
+        map.addLayer({
+            id: 'swath-points', type: 'heatmap', source: 'swaths',
+            paint: {'heatmap-radius': 10, 'heatmap-intensity': 0.01, 'heatmap-opacity': 0.8}
+        }, firstLabel);
+        map.addLayer({
+            id: 'swath-density', type: 'fill-heatmap', source: 'swaths',
+            paint: {
+                'fill-heatmap-limit-count': state.limit,
+                'fill-heatmap-opacity': 0.85,
+                'fill-heatmap-color': [
+                    'interpolate', ['linear'], ['heatmap-density'],
+                    0, 'rgba(255, 255, 178, 0)',
+                    0.05, 'rgba(255, 237, 160, 0.7)',
+                    0.25, '#fed976',
+                    0.45, '#feb24c',
+                    0.65, '#fd8d3c',
+                    0.85, '#f03b20',
+                    1, '#bd0026'
+                ]
+            }
+        }, firstLabel);
+
+        segmented('mode', 'mode', button => button.dataset.mode);
+        segmented('wind', 'kt', button => Number(button.dataset.kt));
+        for (const button of document.querySelectorAll('#wind button')) {
+            button.addEventListener('click', () => {
+                state.limit = defaultLimits[state.kt];
+                document.getElementById('limit').value = state.limit;
+                render();
+            });
+        }
+        for (const id of ['since', 'limit']) {
+            document.getElementById(id).addEventListener('input', event => {
+                state[id] = Number(event.target.value);
+                render();
+            });
+        }
+        render();
+    });
+</script>
+</body>
+</html>
