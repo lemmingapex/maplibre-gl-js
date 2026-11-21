@@ -1,7 +1,7 @@
 uniform highp float u_intensity;
 
-in vec2 v_coord;
-in float v_length;
+in highp vec2 v_coord;
+in highp float v_length;
 
 #pragma maplibre: define highp float weight
 

@@ -61,10 +61,10 @@ export class HeatmapStyleLayer extends StyleLayer {
         this.colorRampTexture = null;
     }
 
+    /** Frees the layer's density textures, which are sized to the screen and remade at the new size. */
     resize(): void {
-        if (this.heatmapFbos.has(HEATMAP_FULL_RENDER_FBO_KEY)) {
-            this.heatmapFbos.delete(HEATMAP_FULL_RENDER_FBO_KEY);
-        }
+        for (const fbo of this.heatmapFbos.values()) fbo.destroy();
+        this.heatmapFbos.clear();
     }
 
     /** Whether lines and polygons are drawn along their length and over their area, rather than at their vertices. */

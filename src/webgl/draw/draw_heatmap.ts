@@ -43,8 +43,14 @@ const SHAPES_DENSITY_SCALE = 2;
  */
 const POLYGON_BLUR_TEXELS = 3;
 
-/** The coarsest the polygon textures get, as a fraction of the screen. */
+/** The coarsest the polygon textures get, as a fraction of the screen, unless the blur needs coarser. */
 const MAX_POLYGON_SCALE = 16;
+
+/**
+ * The widest spread, in texels, that the blur shader reaches 3σ for: it samples at most 32 texels
+ * to each side. Past this the polygon textures get coarser rather than the blur getting cut short.
+ */
+const MAX_POLYGON_BLUR_TEXELS = 10;
 
 /** The radius polygons are blurred with when `heatmap-radius` depends on feature properties. */
 const DEFAULT_HEATMAP_RADIUS = styleSpec.paint_heatmap['heatmap-radius'].default;
@@ -57,6 +63,8 @@ export function drawHeatmap(painter: Painter, tileManager: TileManager, layer: H
         return;
     }
     const context = frameRenderContext.context;
+
+    if (!layer.drawsShapes()) releasePolygonFramebuffers(layer);
 
     if (frameRenderContext.terrain && !layer.drawsShapes()) {
         for (const coord of tileIDs) {
@@ -189,7 +197,13 @@ function polygonBlurRadius(layer: HeatmapStyleLayer): number {
     return layer.paint.get('heatmap-radius').constantOr(DEFAULT_HEATMAP_RADIUS);
 }
 
-/** Returns the polygon blur's spread in screen pixels: a third of the radius, as for the point kernel. */
+/**
+ * Returns the polygon blur's spread in screen pixels: a third of the radius, as for the point kernel.
+ *
+ * The spread is the same everywhere on the screen, whereas a line or point kernel is sized in tile
+ * units and shrinks with distance, so under pitch or on the globe a polygon's edge fades over more
+ * of the map towards the horizon than a line of the same radius does.
+ */
 function polygonBlurSigma(layer: HeatmapStyleLayer, frameRenderContext: FrameRenderContext): number {
     return polygonBlurRadius(layer) / 3 * frameRenderContext.data.pixelRatio;
 }
@@ -201,12 +215,15 @@ function polygonBlurSigma(layer: HeatmapStyleLayer, frameRenderContext: FrameRen
  */
 function drawPolygonDensityFlat(painter: Painter, layer: HeatmapStyleLayer, buckets: ReturnType<typeof bucketsToDraw>, target: Framebuffer, frameRenderContext: FrameRenderContext) {
     const withPolygons = buckets.filter(({bucket}) => bucket.fillSegments.get().length > 0);
-    if (!withPolygons.length) return;
+    if (!withPolygons.length) {
+        releasePolygonFramebuffers(layer);
+        return;
+    }
 
     const context = frameRenderContext.context;
     const gl = context.gl;
     const sigma = polygonBlurSigma(layer, frameRenderContext);
-    const scale = clamp(Math.round(sigma / POLYGON_BLUR_TEXELS), SHAPES_DENSITY_SCALE, MAX_POLYGON_SCALE);
+    const scale = polygonTextureScale(sigma);
     const width = Math.ceil(painter.width / scale);
     const height = Math.ceil(painter.height / scale);
 
@@ -228,6 +245,24 @@ function drawPolygonDensityFlat(painter: Painter, layer: HeatmapStyleLayer, buck
 
     const blurred = layerFramebuffer(context, layer, POLYGON_BLUR_FBO_KEY, width, height);
     blurPolygonCoverage(painter, layer, coverage, blurred, target, sigma / scale, frameRenderContext);
+}
+
+/**
+ * Returns how many times smaller than the screen the polygon textures are for a blur of `sigma`
+ * screen pixels: about `POLYGON_BLUR_TEXELS` texels per σ, and never so fine that the blur shader
+ * falls short of 3σ.
+ */
+function polygonTextureScale(sigma: number): number {
+    const scale = clamp(Math.round(sigma / POLYGON_BLUR_TEXELS), SHAPES_DENSITY_SCALE, MAX_POLYGON_SCALE);
+    return Math.max(scale, Math.ceil(sigma / MAX_POLYGON_BLUR_TEXELS));
+}
+
+/** Frees the polygon coverage and blur textures, for a frame that draws no polygons. */
+function releasePolygonFramebuffers(layer: HeatmapStyleLayer) {
+    for (const key of [POLYGON_COVERAGE_FBO_KEY, POLYGON_BLUR_FBO_KEY]) {
+        layer.heatmapFbos.get(key)?.destroy();
+        layer.heatmapFbos.delete(key);
+    }
 }
 
 /**

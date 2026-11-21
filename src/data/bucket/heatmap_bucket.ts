@@ -39,9 +39,8 @@ const POLYGON = 3;
 /**
  * Returns the part of the segment from `a` to `b` that lies inside the tile, or `null` when none of it does.
  *
- * Clipping to the tile itself, rather than to its buffer, is what lets a line's kernel spread past
- * the tile edge without being counted twice: the neighbouring tile draws the rest of the line, and
- * the two pieces add up to exactly the whole.
+ * A line's kernel spreads past the tile edge, so the segment itself must stop at the edge: the
+ * neighbouring tile draws the rest of the line, and the two pieces add up to exactly the whole.
  */
 export function clipSegmentToTile(a: Point, b: Point): [Point, Point] | null {
     const dx = b.x - a.x;
@@ -74,9 +73,9 @@ export function clipSegmentToTile(a: Point, b: Point): [Point, Point] | null {
  * Returns the part of a polygon ring inside the tile, clipping it against each tile edge in turn,
  * or an empty ring when none of it is inside.
  *
- * Each ring of a polygon can be clipped on its own because the tile is convex. Clipping in the
- * bucket, rather than with a stencil mask when drawing, keeps every vertex inside the tile, where
- * the terrain under it is known, so a polygon can be drawn at its elevation.
+ * Each ring of a polygon can be clipped on its own because the tile is convex. Every vertex of the
+ * result lies inside the tile, where the terrain under it is known, so a polygon can be drawn at
+ * its elevation.
  */
 export function clipRingToTile(ring: Point[]): Point[] {
     const edges: Array<{inside: (p: Point) => boolean; cross: (a: Point, b: Point) => Point}> = [

@@ -43,6 +43,20 @@ function lineSegments(bucket: HeatmapBucket): number[][] {
     return segments;
 }
 
+/** Returns the total area, in square tile units, of the triangles the polygons were cut into. */
+function triangulatedArea(bucket: HeatmapBucket): number {
+    const positions = bucket.fillLayoutVertexArray.int16;
+    const indices = bucket.fillIndexArray.uint16;
+    let area = 0;
+    for (const segment of bucket.fillSegments.get()) {
+        for (let i = segment.primitiveOffset * 3; i < (segment.primitiveOffset + segment.primitiveLength) * 3; i += 3) {
+            const [a, b, c] = [0, 1, 2].map(k => (segment.vertexOffset + indices[i + k]) * 2);
+            area += Math.abs((positions[b] - positions[a]) * (positions[c + 1] - positions[a + 1]) - (positions[c] - positions[a]) * (positions[b + 1] - positions[a + 1])) / 2;
+        }
+    }
+    return area;
+}
+
 describe('clipSegmentToTile', () => {
     test('returns the part of a segment inside the tile', () => {
         const clipped = clipSegmentToTile(new Point(-100, 4096), new Point(EXTENT + 100, 4096));
@@ -108,6 +122,16 @@ describe('HeatmapBucket', () => {
         expect(Math.min(...coordinates)).toBe(0);
         expect(Math.max(...coordinates)).toBe(300);
         expect(bucket.layoutVertexArray).toHaveLength(0);
+    });
+
+    test('leaves a hole that crosses the tile edge empty', () => {
+        const bucket = createHeatmapBucket('shapes');
+        const outer: Array<[number, number]> = [[-100, -100], [300, -100], [300, 300], [-100, 300], [-100, -100]];
+        const hole: Array<[number, number]> = [[-50, 100], [-50, 200], [50, 200], [50, 100], [-50, 100]];
+
+        populate(bucket, createFeature(3, [outer, hole]));
+
+        expect(triangulatedArea(bucket)).toBe(300 * 300 - 50 * 100);
     });
 
     test('still draws a point as a kernel with heatmap-geometry: shapes', () => {
