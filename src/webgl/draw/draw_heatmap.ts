@@ -14,7 +14,6 @@ import {
 import {HEATMAP_FULL_RENDER_FBO_KEY} from '../../style/style_layer/heatmap_style_layer.ts';
 import {getCameraMath} from '../../camera/camera_math_factory.ts';
 import {pixelsToTileUnits} from '../../source/pixels_to_tile_units.ts';
-import {EXTENT} from '../../data/extent.ts';
 import {clamp} from '../../util/util.ts';
 
 import type {FrameRenderContext} from '../../render/frame_render_context.ts';
@@ -290,12 +289,15 @@ function blurPolygonCoverage(painter: Painter, layer: HeatmapStyleLayer, coverag
     pass(scratch, target, [0, 1 / scratch.height], additiveColorMode(context));
 }
 
-/** Draws each line segment's kernel into the bound density texture. */
+/**
+ * Draws each line segment's kernel into the bound density texture. On the globe the shader scales
+ * each segment by its own latitude, so the scale passed here carries only the camera's part.
+ */
 function drawLineKernels(layer: HeatmapStyleLayer, buckets: ReturnType<typeof bucketsToDraw>, frameRenderContext: FrameRenderContext) {
     const context = frameRenderContext.context;
     const gl = context.gl;
     const projectedCamera = frameRenderContext.projectedCamera;
-    const cameraMath = getCameraMath(projectedCamera);
+    const pixelScale = getCameraMath(projectedCamera).getPixelScale(projectedCamera);
     const intensity = layer.paint.get('heatmap-intensity');
     const colorMode = additiveColorMode(context);
 
@@ -305,8 +307,7 @@ function drawLineKernels(layer: HeatmapStyleLayer, buckets: ReturnType<typeof bu
         const programConfiguration = bucket.lineProgramConfigurations.get(layer.id);
         const program = frameRenderContext.useProgram('heatmapLine', programConfiguration);
         const projectionData = frameRenderContext.getProjectionDataForTile(coord, {applyTerrainMatrix: false});
-        const correction = cameraMath.getPitchedTextCorrection(projectedCamera, EXTENT / 2, EXTENT / 2, coord.toUnwrapped());
-        const extrudeScale = pixelsToTileUnits(tile, 1, projectedCamera.zoom) * correction;
+        const extrudeScale = pixelsToTileUnits(tile, 1, projectedCamera.zoom) / pixelScale;
 
         program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, colorMode, CullFaceMode.disabled,
             heatmapLineUniformValues(extrudeScale, intensity),

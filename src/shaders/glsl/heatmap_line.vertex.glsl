@@ -18,12 +18,13 @@ void main(void) {
     #pragma maplibre: initialize highp float weight
     #pragma maplibre: initialize mediump float radius
 
-    // The kernel is a Gaussian with sigma = radius / 3, in tile units like the point kernel.
-    float sigma = radius / 3.0 * u_extrude_scale;
-    float reach = sqrt(max(-2.0 * log(ZERO / (weight * u_intensity)), 0.0));
-
     vec2 start = a_segment.xy;
     vec2 end = a_segment.zw;
+
+    // The kernel is a Gaussian with sigma = radius / 3, in tile units like the point kernel. On the
+    // globe a tile unit spans less ground towards the poles, so sigma follows the segment's latitude.
+    float sigma = radius / 3.0 * u_extrude_scale * projectLineThickness((start.y + end.y) * 0.5);
+    float reach = sqrt(max(-2.0 * log(ZERO / (weight * u_intensity)), 0.0));
     float len = length(end - start);
     vec2 dir = (end - start) / len;
     vec2 normal = vec2(-dir.y, dir.x);
