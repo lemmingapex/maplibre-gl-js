@@ -265,8 +265,10 @@ function releasePolygonFramebuffers(layer: HeatmapStyleLayer) {
 }
 
 /**
- * Blurs `coverage` horizontally into `scratch`, then vertically, adding the result into `target`.
- * `sigma` is in texels of `coverage`; the target may be any size, since it samples with filtering.
+ * Blurs `coverage` in place, horizontally into `scratch` and vertically back, then adds it into
+ * `target` with one filtered sample per pixel. `sigma` is in texels of `coverage`. Both blur passes
+ * run at the coverage texture's size, which coarsens as the radius grows, so a large radius blurs
+ * fewer texels than a small one.
  */
 function blurPolygonCoverage(painter: Painter, layer: HeatmapStyleLayer, coverage: Framebuffer, scratch: Framebuffer, target: Framebuffer, sigma: number, frameRenderContext: FrameRenderContext) {
     const context = frameRenderContext.context;
@@ -274,19 +276,18 @@ function blurPolygonCoverage(painter: Painter, layer: HeatmapStyleLayer, coverag
     const program = frameRenderContext.useProgram('heatmapBlur');
     const zoom = frameRenderContext.projectedCamera.zoom;
 
-    const pass = (source: Framebuffer, destination: Framebuffer, step: [number, number], colorMode: Readonly<ColorMode>) => {
+    const pass = (source: Framebuffer, destination: Framebuffer, step: [number, number], passSigma: number, colorMode: Readonly<ColorMode>) => {
         useFramebuffer(context, destination);
         context.activeTexture.set(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, source.colorAttachment.get());
         program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, colorMode, CullFaceMode.disabled,
-            heatmapBlurUniformValues(0, step, sigma), null, null,
+            heatmapBlurUniformValues(0, step, passSigma), null, null,
             layer.id, painter.viewportBuffer, painter.quadTriangleIndexBuffer, painter.viewportSegments, layer.paint, zoom);
     };
 
-    useFramebuffer(context, scratch);
-    context.clear({color: Color.transparent});
-    pass(coverage, scratch, [1 / coverage.width, 0], ColorMode.unblended);
-    pass(scratch, target, [0, 1 / scratch.height], additiveColorMode(context));
+    pass(coverage, scratch, [1 / coverage.width, 0], sigma, ColorMode.unblended);
+    pass(scratch, coverage, [0, 1 / scratch.height], sigma, ColorMode.unblended);
+    pass(coverage, target, [0, 0], 0, additiveColorMode(context));
 }
 
 /**
