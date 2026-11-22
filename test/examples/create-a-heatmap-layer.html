@@ -11,15 +11,72 @@
     <link rel='stylesheet' href='../../dist/maplibre-gl.css' />
 
     <style>
-        body { margin: 0; padding: 0; }
+        body { margin: 0; padding: 0; font: 13px/1.4 system-ui, sans-serif; }
         html, body, #map { height: 100%; }
+        #panel {
+            position: absolute; top: 10px; left: 10px; width: 220px;
+            padding: 10px 12px; background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        }
+        .row { margin: 4px 0 10px; }
+        .row:last-child { margin-bottom: 0; }
+        .row label { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 4px; }
+        .row label output { font-weight: 400; color: #555; }
+        input[type=range], select { width: 100%; margin: 0; }
+        #ramp { height: 8px; border-radius: 2px; margin-top: 6px; }
     </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="panel">
+    <div class="row">
+        <label for="radius">Radius at zoom 9 <output id="radius-value"></output></label>
+        <input id="radius" type="range" min="5" max="60" step="1" value="20">
+    </div>
+    <div class="row">
+        <label for="colors">Colours</label>
+        <select id="colors">
+            <option value="blueRed">Blue to red</option>
+            <option value="default">Default</option>
+            <option value="fire">Fire</option>
+            <option value="viridis">Viridis</option>
+            <option value="blues">Blues</option>
+        </select>
+        <div id="ramp"></div>
+    </div>
+</div>
 
 <script type="module">
     import * as maplibregl from '../../dist/maplibre-gl-dev.mjs';
+
+    // Colour ramps as stops from 0 (low density) to 1 (high). Each begins with a transparent colour,
+    // so that the heatmap fades out at its edges. `default` is the ramp a heatmap gets when
+    // heatmap-color is not set.
+    const RAMPS = {
+        blueRed: [[0, 'rgba(33,102,172,0)'], [0.2, 'rgb(103,169,207)'], [0.4, 'rgb(209,229,240)'], [0.6, 'rgb(253,219,199)'], [0.8, 'rgb(239,138,98)'], [1, 'rgb(178,24,43)']],
+        default: [[0, 'rgba(0,0,255,0)'], [0.1, 'royalblue'], [0.3, 'cyan'], [0.5, 'lime'], [0.7, 'yellow'], [1, 'red']],
+        fire: [[0, 'rgba(255,255,178,0)'], [0.15, '#fed976'], [0.4, '#fd8d3c'], [0.7, '#e31a1c'], [1, '#800026']],
+        viridis: [[0, 'rgba(68,1,84,0)'], [0.1, '#440154'], [0.35, '#31688e'], [0.6, '#35b779'], [1, '#fde725']],
+        blues: [[0, 'rgba(222,235,247,0)'], [0.2, '#c6dbef'], [0.5, '#6baed6'], [0.8, '#2171b5'], [1, '#08306b']]
+    };
+
+    /** Colours the heatmap by density with the given stops. */
+    function heatmapColor(stops) {
+        return ['interpolate', ['linear'], ['heatmap-density'], ...stops.flat()];
+    }
+
+    /** Colours a circle by magnitude with the same stops, magnitude 1 to 6 taking the place of density 0 to 1. */
+    function circleColor(stops) {
+        return ['interpolate', ['linear'], ['get', 'mag'], ...stops.flatMap(([density, color]) => [1 + 5 * density, color])];
+    }
+
+    /** Grows the heatmap radius with zoom, reaching `radius` pixels at zoom 9. */
+    function heatmapRadius(radius) {
+        return ['interpolate', ['linear'], ['zoom'], 0, radius / 10, 9, radius];
+    }
+
+    function rampPreview(stops) {
+        return `linear-gradient(to right, ${stops.map(([density, color]) => `${color} ${density * 100}%`).join(', ')})`;
+    }
 
     const map = new maplibregl.Map({
         container: 'map',
@@ -66,35 +123,9 @@
                         3
                     ],
                     // Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
-                    // Begin color ramp at 0-stop with a 0-transparency color
-                    // to create a blur-like effect.
-                    'heatmap-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['heatmap-density'],
-                        0,
-                        'rgba(33,102,172,0)',
-                        0.2,
-                        'rgb(103,169,207)',
-                        0.4,
-                        'rgb(209,229,240)',
-                        0.6,
-                        'rgb(253,219,199)',
-                        0.8,
-                        'rgb(239,138,98)',
-                        1,
-                        'rgb(178,24,43)'
-                    ],
+                    'heatmap-color': heatmapColor(RAMPS.blueRed),
                     // Adjust the heatmap radius by zoom level
-                    'heatmap-radius': [
-                        'interpolate',
-                        ['linear'],
-                        ['zoom'],
-                        0,
-                        2,
-                        9,
-                        20
-                    ],
+                    'heatmap-radius': heatmapRadius(20),
                     // Transition from heatmap to circle layer by zoom level
                     'heatmap-opacity': [
                         'interpolate',
@@ -127,23 +158,7 @@
                         ['interpolate', ['linear'], ['get', 'mag'], 1, 5, 6, 50]
                     ],
                     // Color circle by earthquake magnitude
-                    'circle-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'mag'],
-                        1,
-                        'rgba(33,102,172,0)',
-                        2,
-                        'rgb(103,169,207)',
-                        3,
-                        'rgb(209,229,240)',
-                        4,
-                        'rgb(253,219,199)',
-                        5,
-                        'rgb(239,138,98)',
-                        6,
-                        'rgb(178,24,43)'
-                    ],
+                    'circle-color': circleColor(RAMPS.blueRed),
                     'circle-stroke-color': 'white',
                     'circle-stroke-width': 1,
                     // Transition from heatmap to circle layer by zoom level
@@ -159,6 +174,24 @@
                 }
             }
         );
+
+        const radius = document.getElementById('radius');
+        const radiusValue = document.getElementById('radius-value');
+        radiusValue.textContent = `${radius.value} px`;
+        radius.addEventListener('input', () => {
+            map.setPaintProperty('earthquakes-heat', 'heatmap-radius', heatmapRadius(Number(radius.value)));
+            radiusValue.textContent = `${radius.value} px`;
+        });
+
+        const colors = document.getElementById('colors');
+        const ramp = document.getElementById('ramp');
+        ramp.style.background = rampPreview(RAMPS.blueRed);
+        colors.addEventListener('change', () => {
+            const stops = RAMPS[colors.value];
+            map.setPaintProperty('earthquakes-heat', 'heatmap-color', heatmapColor(stops));
+            map.setPaintProperty('earthquakes-point', 'circle-color', circleColor(stops));
+            ramp.style.background = rampPreview(stops);
+        });
     });
 </script>
 </body>
