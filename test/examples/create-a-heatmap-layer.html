@@ -17,6 +17,8 @@
             position: absolute; top: 10px; left: 10px; width: 220px;
             padding: 10px 12px; background: rgba(255, 255, 255, 0.95); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
+        h1 { font-size: 14px; margin: 0 0 2px; }
+        p { margin: 0 0 10px; color: #555; }
         .row { margin: 4px 0 10px; }
         .row:last-child { margin-bottom: 0; }
         .row label { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 4px; }
@@ -28,6 +30,8 @@
 <body>
 <div id="map"></div>
 <div id="panel">
+    <h1>Earthquakes, <span style="white-space: nowrap">Sep–Oct 2017</span></h1>
+    <p>A month of earthquakes worldwide, weighted by magnitude.</p>
     <div class="row">
         <label for="radius">Radius at zoom 9 <output id="radius-value"></output></label>
         <input id="radius" type="range" min="5" max="60" step="1" value="20">
@@ -86,12 +90,14 @@
     });
 
     map.on('load', () => {
-        // Add a geojson point source.
+        // Earthquakes of 8 September to 8 October 2017 from the USGS earthquake catalog (public domain):
+        // https://earthquake.usgs.gov/earthquakes/search/
         // Heatmap layers also work with a vector tile source.
         map.addSource('earthquakes', {
             'type': 'geojson',
             'data':
-                'https://maplibre.org/maplibre-gl-js/docs/assets/earthquakes.geojson'
+                'https://maplibre.org/maplibre-gl-js/docs/assets/earthquakes.geojson',
+            'attribution': 'Earthquakes: <a href="https://earthquake.usgs.gov/">U.S. Geological Survey</a>'
         });
 
         map.addLayer(
